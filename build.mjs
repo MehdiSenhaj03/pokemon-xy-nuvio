@@ -351,13 +351,15 @@ function build (cfg, info, mapping) {
     const label = s === '0' ? `Spécial ${e}` : `S${s.padStart(2, '0')}E${e.padStart(2, '0')}`
     return `<li><b>${label}</b> ${fs_[0].title ? esc(fs_[0].title) + ' — ' : ''}<span>${esc(path.basename(fs_[0].path))}</span></li>`
   }).join('\n')
-  fs.writeFileSync(path.join(DIST, 'index.html'), installPage(cfg, epList, shown.size, poster))
+  const magnet = `magnet:?xt=urn:btih:${info.infoHash}&dn=${encodeURIComponent(info.name || cfg.seriesName)}` +
+    trackers.slice(0, 10).map(t => `&tr=${encodeURIComponent(t)}`).join('')
+  fs.writeFileSync(path.join(DIST, 'index.html'), installPage(cfg, epList, shown.size, poster, magnet))
   fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
 
   return { episodes: shown.size, imdbLinked: imdbGroups.size, seriesId: ownMeta ? ownId : imdbId }
 }
 
-function installPage (cfg, epList, count, poster) {
+function installPage (cfg, epList, count, poster, magnet) {
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(cfg.addonName)}</title>
@@ -381,11 +383,19 @@ li{padding:6px 0;border-bottom:1px solid #232733;font-size:14px}li span{color:va
 <div class="box"><b>Installer dans Nuvio</b><ol>
 <li>Copie le lien ci-dessus.</li><li>Nuvio → Paramètres → Addons.</li><li>Colle le lien et valide.</li>
 <li>Cherche « ${esc(cfg.seriesName)} » ou ouvre-la depuis l'accueil, choisis un épisode, puis la source « ${esc(cfg.addonName)} ».</li></ol></div>
+<div class="box"><b>Avec TorBox ou Premiumize (sans P2P)</b><ol>
+<li>Dans Nuvio : Paramètres → Debrid, connecte ton compte TorBox ou Premiumize.</li>
+<li>Les épisodes passent alors par ton debrid : lecture directe, sans P2P, et ton IP n'est pas exposée.</li>
+<li>Ça ne marche que si le torrent est déjà dans le cache du service. Sinon, ajoute ce magnet <b>une fois</b> sur le site de TorBox ou Premiumize. Une fois téléchargé chez eux, il devient disponible pour tout le monde.</li></ol>
+<code id="magnet">${esc(magnet)}</code>
+<div class="btns"><button id="copymag">Copier le magnet</button></div></div>
 <div class="box"><b>Épisodes</b><ul>${epList}</ul></div>
 </main><script>
 const u=new URL('manifest.json',location.href).href;document.getElementById('url').textContent=u;
 document.getElementById('stremio').href=u.replace(/^https?:/,'stremio:');
-document.getElementById('copy').onclick=async e=>{try{await navigator.clipboard.writeText(u);e.target.textContent='Copié ✔'}catch{prompt('Copie ce lien :',u)}};
+const copy=(btn,text)=>btn.onclick=async e=>{try{await navigator.clipboard.writeText(text);e.target.textContent='Copié ✔'}catch{prompt('Copie ce lien :',text)}};
+copy(document.getElementById('copy'),u);
+copy(document.getElementById('copymag'),document.getElementById('magnet').textContent);
 </script></body></html>`
 }
 

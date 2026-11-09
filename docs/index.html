@@ -21,6 +21,12 @@ li{padding:6px 0;border-bottom:1px solid #232733;font-size:14px}li span{color:va
 <div class="box"><b>Installer dans Nuvio</b><ol>
 <li>Copie le lien ci-dessus.</li><li>Nuvio → Paramètres → Addons.</li><li>Colle le lien et valide.</li>
 <li>Cherche « Pokémon XY &amp; XYZ » ou ouvre-la depuis l'accueil, choisis un épisode, puis la source « Pokémon XY RAW ».</li></ol></div>
+<div class="box"><b>Avec TorBox ou Premiumize (sans P2P)</b><ol>
+<li>Dans Nuvio : Paramètres → Debrid, connecte ton compte TorBox ou Premiumize.</li>
+<li>Les épisodes passent alors par ton debrid : lecture directe, sans P2P, et ton IP n'est pas exposée.</li>
+<li>Ça ne marche que si le torrent est déjà dans le cache du service. Sinon, ajoute ce magnet <b>une fois</b> sur le site de TorBox ou Premiumize. Une fois téléchargé chez eux, il devient disponible pour tout le monde.</li></ol>
+<code id="magnet">magnet:?xt=urn:btih:9f2fdf639135f9cf5c76d727facff1ff060abf29&amp;dn=%5BF-R%5D%20Pocket%20Monsters%20XY-XY%26Z%20Complete%20%5BRAW-1080p%5D&amp;tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&amp;tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&amp;tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&amp;tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce&amp;tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce</code>
+<div class="btns"><button id="copymag">Copier le magnet</button></div></div>
 <div class="box"><b>Épisodes</b><ul><li><b>S17E01</b> Kalos, Where Dreams and Adventures Begin! — <span>Pocket Monsters XY - 001 - Kalos-chihou ni yatte-kita! Yume to bouken no hajimari!! [RAW][F-R][FDB74648].mkv</span></li>
 <li><b>S17E02</b> Lumiose City Pursuit! — <span>Pocket Monsters XY - 002 - Megashinka to Prism Tower! [RAW][F-R][56652F58].mkv</span></li>
 <li><b>S17E03</b> A Battle of Aerial Mobility! — <span>Pocket Monsters XY - 003 - Keromatsu VS Yayakoma! Kuuchuu kidou battle!! [RAW][F-R][630A3378].mkv</span></li>
@@ -170,5 +176,7 @@ li{padding:6px 0;border-bottom:1px solid #232733;font-size:14px}li span{color:va
 </main><script>
 const u=new URL('manifest.json',location.href).href;document.getElementById('url').textContent=u;
 document.getElementById('stremio').href=u.replace(/^https?:/,'stremio:');
-document.getElementById('copy').onclick=async e=>{try{await navigator.clipboard.writeText(u);e.target.textContent='Copié ✔'}catch{prompt('Copie ce lien :',u)}};
+const copy=(btn,text)=>btn.onclick=async e=>{try{await navigator.clipboard.writeText(text);e.target.textContent='Copié ✔'}catch{prompt('Copie ce lien :',text)}};
+copy(document.getElementById('copy'),u);
+copy(document.getElementById('copymag'),document.getElementById('magnet').textContent);
 </script></body></html>
