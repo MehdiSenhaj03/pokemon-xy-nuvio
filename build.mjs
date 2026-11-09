@@ -326,12 +326,33 @@ function build (cfg, info, mapping) {
     writeJson(`meta/series/${ownId}.json`, { meta: { ...preview, videos } })
   }
 
+  // --- sous-titres : <subtitlesDir>/S17E01.fra.vtt (numérotation de mapping.json), publiés dans docs/subtitles/
+  const subsByEp = new Map()
+  const subsSrc = path.join(ROOT, cfg.subtitlesDir || 'subtitles')
+  if (fs.existsSync(subsSrc)) {
+    if (!cfg.publicUrl) fail('config.json : "publicUrl" est obligatoire pour publier les sous-titres (ex. https://pseudo.github.io/depot).')
+    const base = cfg.publicUrl.replace(/\/+$/, '')
+    fs.mkdirSync(path.join(DIST, 'subtitles'), { recursive: true })
+    for (const f of fs.readdirSync(subsSrc).sort()) {
+      const m = f.match(/^S(\d+)E(\d+)\.([a-z]{2,3})\.(vtt|srt)$/i)
+      if (!m) continue
+      fs.copyFileSync(path.join(subsSrc, f), path.join(DIST, 'subtitles', f))
+      const key = `${+m[1]}:${+m[2]}`
+      if (!subsByEp.has(key)) subsByEp.set(key, [])
+      subsByEp.get(key).push({ id: `${cfg.addonId}-${key}-${m[3]}`, url: `${base}/subtitles/${f}`, lang: m[3].toLowerCase() })
+    }
+    // Français en premier.
+    for (const list of subsByEp.values()) list.sort((a, b) => (a.lang === 'fra' ? -1 : 0) - (b.lang === 'fra' ? -1 : 0))
+  }
+
   // --- flux
   const streamsFor = (files) => files.map(e => {
     const filename = path.basename(e.path)
     const size = sizeByIdx.get(e.fileIdx)
     const text = `${filename}\n💾 ${humanSize(size)}`
+    const subtitles = subsByEp.get(`${e.season}:${e.episode}`)
     return {
+      ...(subtitles ? { subtitles } : {}),
       name: `${cfg.addonName}${cfg.streamLabel ? '\n' + cfg.streamLabel : ''}`,
       title: text,
       description: text,
@@ -356,7 +377,7 @@ function build (cfg, info, mapping) {
   fs.writeFileSync(path.join(DIST, 'index.html'), installPage(cfg, epList, shown.size, poster, magnet))
   fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
 
-  return { episodes: shown.size, imdbLinked: imdbGroups.size, seriesId: ownMeta ? ownId : imdbId }
+  return { episodes: shown.size, imdbLinked: imdbGroups.size, seriesId: ownMeta ? ownId : imdbId, subtitled: subsByEp.size }
 }
 
 function installPage (cfg, epList, count, poster, magnet) {
@@ -405,7 +426,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const cfg = loadConfig()
   const info = await getTorrentInfo(cfg)
   const mapping = loadOrCreateMapping(info)
-  const { episodes, imdbLinked, seriesId } = build(cfg, info, mapping)
+  const { episodes, imdbLinked, seriesId, subtitled } = build(cfg, info, mapping)
 
   const seasons = {}
   for (const e of mapping.episodes) (seasons[e.season] ||= new Set()).add(e.episode)
@@ -424,6 +445,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   }
   if (!cfg.imdbId || cfg.ownMeta) console.log(`\nℹ Fiche maison fournie par l'addon (id "${seriesId}").`)
   if (cfg.imdbId) console.log(`ℹ ${imdbLinked} épisode(s) aussi rattaché(s) à la fiche IMDb ${cfg.imdbId}.`)
+  if (subtitled) console.log(`ℹ Sous-titres fournis pour ${subtitled} épisode(s).`)
   console.log('\nTeste en local : npm run serve   puis héberge le dossier docs/ (voir README).')
   process.exit(0) // webtorrent peut laisser des sockets ouverts
 }

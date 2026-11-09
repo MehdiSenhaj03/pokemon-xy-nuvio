@@ -2,23 +2,23 @@
   "addonId": "community.pokemon.xy.raw",
   "addonName": "Pokémon XY RAW",
   "description": "Pokémon XY, XY Kalos Quest et XYZ en intégralité (saisons 17, 18, 19) + les 6 épisodes spéciaux. VO japonaise, 1080p.",
-  "version": "1.0.1",
-
+  "version": "1.1.0",
   "source": "pokemon-xy.torrent",
-
   "imdbId": "tt0168366",
   "ownMeta": true,
   "ownMetaId": "pokemonxy",
-
   "seriesName": "Pokémon XY & XYZ",
   "year": "2013–2016",
-  "genres": ["Animation", "Aventure"],
+  "genres": [
+    "Animation",
+    "Aventure"
+  ],
   "poster": "",
   "background": "",
   "logo": "",
-
   "streamLabel": "1080p VO JP",
-
+  "publicUrl": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio",
+  "subtitlesDir": "subtitles",
   "extraTrackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",

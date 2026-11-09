@@ -20,6 +20,14 @@ Ouvre `config.json` :
 | `year` / `genres` | Optionnel : affichés sur la fiche maison |
 | `streamLabel` | Petit texte sous le nom de la source, ex. `1080p VF` |
 | `extraTrackers` | Trackers ajoutés pour trouver plus vite des pairs |
+| `publicUrl` | Adresse où l'addon est hébergé (ex. `https://pseudo.github.io/depot`). Obligatoire si tu fournis des sous-titres. |
+| `subtitlesDir` | Dossier des sous-titres (par défaut `subtitles`) |
+
+### Sous-titres (optionnel)
+
+Mets des fichiers `.vtt` ou `.srt` dans `subtitles/`, nommés selon la numérotation de `mapping.json` :
+`S17E01.fra.vtt`, `S17E01.eng.vtt`… Le build les publie dans `docs/subtitles/` et les attache à chaque
+flux de l'épisode. Nuvio les propose alors dans le menu des sous-titres.
 
 ## 2. Générer l'addon
 
