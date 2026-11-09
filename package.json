@@ -1,0 +1,21 @@
+{
+  "name": "nuvio-torrent-addon",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.mjs",
+    "serve": "node serve.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "webtorrent": "^2.8.5"
+  },
+  "overrides": {
+    "uint8-util": "2.2.5"
+  }
+}
