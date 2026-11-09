@@ -63,6 +63,17 @@ if (pack) {
   var convert = (n, src) => { img(src, path.join(ASSETS, `E${String(n).padStart(3, '0')}.jpg`), 640); return `${base}/assets/onepiecekai/E${String(n).padStart(3, '0')}.jpg` }
 }
 
+// Sous-titres intégrés aux fichiers (vérifiés sur des échantillons de chaque groupe) :
+//  - MULTI (1 à 68) : piste « Français (VOST) » complète mais marquée « japonais »,
+//    piste « Français (VF) » = seulement les titres (pour la VF) ;
+//  - MP4 et [Zdk] (69 à 107) : sous-titres incrustés dans l'image ;
+//  - autres MKV VOSTFR (108 à 133) : piste ASS en français.
+function subtitleNote (lang, file) {
+  if (lang === 'MULTI') return '🔤 VO : choisis les sous-titres « Français (VOST) ». La piste « Français (VF) » ne contient que les titres.'
+  if (/\.mp4$/i.test(file) || /\[Zdk\]/.test(file)) return '🔤 Sous-titres incrustés dans l\'image : désactive les autres sous-titres.'
+  return '🔤 Sous-titres français intégrés (ASS). S\'ils ne s\'affichent pas, essaie l\'autre lecteur dans les réglages de Nuvio.'
+}
+
 const episodes = []; const ignored = []; const unmatched = []
 let withDetails = 0
 for (const f of info.files) {
@@ -84,6 +95,7 @@ for (const f of info.files) {
     episode: abs,
     title: fileTitle,
     label: `${m[3]} ${m[4]}`,
+    note: subtitleNote(m[4], path.basename(f.path)),
     ...(d?.plot ? { overview: d.plot } : {}),
     ...(d?.aired ? { released: new Date(d.aired + 'T12:00:00Z').toISOString() } : {}),
     ...(d?.thumb && convert ? { thumbnail: convert(abs, d.thumb) } : {})

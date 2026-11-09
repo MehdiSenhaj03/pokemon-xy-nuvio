@@ -338,7 +338,7 @@ function buildSeries (addon, s, info, mapping) {
   const streamsFor = (files) => files.map(e => {
     const filename = path.basename(e.path)
     const size = sizeByIdx.get(e.fileIdx)
-    const text = `${filename}\n💾 ${humanSize(size)}`
+    const text = `${filename}\n💾 ${humanSize(size)}${e.note ? "\n" + e.note : ""}`
     const subtitles = subsByEp.get(`${e.season}:${e.episode}`)
     const label = e.label || s.streamLabel
     return {
