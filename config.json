@@ -2,7 +2,7 @@
   "addonId": "community.pokemon.xy.raw",
   "addonName": "Collection Anime",
   "description": "Pokémon XY / XYZ en VO japonaise 1080p (sous-titres FR) et One Piece Kaï (VF/VOSTFR).",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publicUrl": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio",
   "catalogId": "pokemonxy-catalog",
   "extraTrackers": [
@@ -28,7 +28,18 @@
       "streamLabel": "1080p VO JP",
       "subtitlesDir": "subtitles",
       "mapping": "mapping.json",
-      "cache": "torrent-info.json"
+      "cache": "torrent-info.json",
+      "searchTerms": [
+        "Pokémon XY",
+        "Pokémon XYZ",
+        "Pokémon XY&Z",
+        "Pokémon",
+        "Pocket Monsters XY",
+        "Pocket Monsters",
+        "Pokemon Kalos",
+        "XY&Z",
+        "XYZ"
+      ]
     },
     {
       "key": "onepiecekai",
@@ -46,7 +57,17 @@
       "cache": "torrent-info-onepiecekai.json",
       "poster": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/poster.jpg",
       "background": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/background.jpg",
-      "logo": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/logo.png"
+      "logo": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/logo.png",
+      "searchTerms": [
+        "One Piece Kaï",
+        "One Piece Kai",
+        "One Piece",
+        "One Piece Yabai",
+        "Fan-Kai",
+        "Fan Kai",
+        "Luffy",
+        "Wan Pisu"
+      ]
     }
   ]
 }

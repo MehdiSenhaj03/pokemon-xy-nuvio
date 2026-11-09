@@ -400,15 +400,51 @@ function build (addon, list) {
     resources,
     types: ['series'],
     idPrefixes: [...ownIds, ...imdbIds],
-    catalogs: [{ type: 'series', id: catalogId, name: addon.addonName }],
+    // "search" optionnel : le catalogue reste sur l'accueil ET sert à la barre de recherche.
+    catalogs: [{ type: 'series', id: catalogId, name: addon.addonName, extra: [{ name: 'search', isRequired: false }] }],
     behaviorHints: { configurable: false, p2p: true }
   }
   writeJson('manifest.json', manifest)
   writeJson(`catalog/series/${catalogId}.json`, { metas: built.map(b => b.preview) })
+  const searchFiles = writeSearchFiles(catalogId, built)
+  console.log(`✔ Recherche : ${searchFiles} requêtes pré-générées`)
 
   fs.writeFileSync(path.join(DIST, 'index.html'), installPage(addon, built))
   fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
   return built
+}
+
+// Un addon statique ne peut pas chercher : on pré-génère une réponse pour chaque début de nom
+// (à partir de 2 lettres, de chaque mot), en minuscules, majuscules, Capitalisé, Titre, avec et sans accents.
+// Nuvio et Stremio demandent catalog/series/<id>/search=<texte tapé>.json.
+function writeSearchFiles (catalogId, built) {
+  const strip = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const casings = (s) => [s, s.toLowerCase(), s.toUpperCase(), s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),
+    s.toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase())]
+  const queries = new Map()
+  for (const b of built) {
+    const terms = new Set([b.s.seriesName, ...(b.s.searchTerms || [])])
+    for (const term of terms) {
+      for (const base of new Set([term, strip(term)])) {
+        const words = base.split(/\s+/)
+        for (let w = 0; w < words.length; w++) {
+          const tail = words.slice(w).join(' ')
+          for (let n = 2; n <= tail.length; n++) {
+            const q = tail.slice(0, n).trim()
+            if (q.length < 2 || /[/\\?#%]/.test(q)) continue
+            for (const v of casings(q)) {
+              if (!queries.has(v)) queries.set(v, new Set())
+              queries.get(v).add(b)
+            }
+          }
+        }
+      }
+    }
+  }
+  for (const [q, set] of queries) {
+    writeJson(`catalog/series/${catalogId}/search=${q}.json`, { metas: built.filter(b => set.has(b)).map(b => b.preview) })
+  }
+  return queries.size
 }
 
 function installPage (addon, built) {
