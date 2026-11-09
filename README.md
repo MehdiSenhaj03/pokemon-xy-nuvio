@@ -1,27 +1,44 @@
-# Addon Nuvio : une série depuis un seul torrent
+# Addon Nuvio : des séries depuis des torrents
 
-Ce projet transforme **un magnet ou un fichier .torrent contenant tous les épisodes** en addon
-compatible Nuvio et Stremio. L'addon est **100 % statique** : ce ne sont que des fichiers JSON.
+Ce projet transforme **un ou plusieurs torrents contenant chacun tous les épisodes d'une série** en un
+addon compatible Nuvio et Stremio. L'addon est **100 % statique** : ce ne sont que des fichiers JSON.
 Tu l'héberges gratuitement sur GitHub Pages et tu partages un simple lien.
+
+Séries actuellement incluses : **Pokémon XY & XYZ** (VO japonaise 1080p, sous-titres FR/EN) et
+**One Piece Kaï** (version remontée par des fans, VF/VOSTFR).
 
 ## 1. Configurer
 
-Ouvre `config.json` :
+`config.json` contient les réglages de l'addon, puis la liste des séries dans `series`.
+
+Réglages de l'addon :
 
 | Champ | Rôle |
 |---|---|
-| `addonId` | Identifiant unique, ex. `community.monpseudo.maserie` |
+| `addonId` | Identifiant unique, ex. `community.monpseudo.anime`. Ne le change plus une fois l'addon partagé. |
 | `addonName` | Nom affiché dans Nuvio, à côté des sources |
-| `source` | Ton lien `magnet:?xt=...` **ou** le chemin d'un fichier `.torrent` (ex. `serie.torrent`) |
-| `imdbId` | ID IMDb de la série (`tt1234567`, visible dans l'URL imdb.com). Nuvio récupère alors tout seul le titre, le résumé, les images et le nom des épisodes. Laisse vide si la série n'est pas sur IMDb. |
-| `seriesName` | Nom de la série |
-| `poster` / `background` / `logo` | Optionnel : URLs d'images. Si tu as mis un `imdbId`, elles sont trouvées automatiquement. |
-| `ownMeta` / `ownMetaId` | `true` : l'addon fournit aussi **sa propre fiche** (identifiant `ownMetaId`), avec la numérotation de `mapping.json`. Pratique quand la numérotation IMDb/Cinemeta ne colle pas à celle que tu veux. |
-| `year` / `genres` | Optionnel : affichés sur la fiche maison |
-| `streamLabel` | Petit texte sous le nom de la source, ex. `1080p VF` |
-| `extraTrackers` | Trackers ajoutés pour trouver plus vite des pairs |
+| `description` / `version` | Description de l'addon ; augmente `version` à chaque mise à jour |
 | `publicUrl` | Adresse où l'addon est hébergé (ex. `https://pseudo.github.io/depot`). Obligatoire si tu fournis des sous-titres. |
-| `subtitlesDir` | Dossier des sous-titres (par défaut `subtitles`) |
+| `catalogId` | Optionnel : identifiant du catalogue de l'accueil |
+| `extraTrackers` | Trackers ajoutés pour trouver plus vite des pairs |
+
+Pour chaque série de `series` :
+
+| Champ | Rôle |
+|---|---|
+| `source` | Lien `magnet:?xt=...` **ou** chemin d'un fichier `.torrent` (ex. `serie.torrent`) |
+| `seriesName` / `description` | Nom et résumé de la série |
+| `ownMetaId` | Identifiant de la fiche fournie par l'addon (lettres et chiffres) |
+| `imdbId` | Optionnel : ID IMDb (`tt1234567`). Les flux apparaissent alors aussi sur la fiche officielle. |
+| `ownMeta` | Avec un `imdbId` : `true` pour fournir quand même la fiche maison, avec la numérotation de ton mapping |
+| `poster` / `background` / `logo` | Optionnel : URLs d'images (trouvées automatiquement avec un `imdbId`) |
+| `year` / `genres` | Optionnel : affichés sur la fiche |
+| `streamLabel` | Petit texte sous le nom de la source, ex. `1080p VF` (un épisode peut avoir son propre `label`) |
+| `mapping` / `cache` | Fichiers de correspondance et de cache de la série (par défaut `mapping-<id>.json`, `torrent-info-<id>.json`) |
+| `subtitlesDir` | Dossier des sous-titres de la série |
+
+Pour ajouter une série : ajoute un bloc dans `series`, lance `npm run build`, puis corrige son
+fichier de mapping si besoin (voir plus bas).
 
 ### Sous-titres (optionnel)
 
@@ -60,8 +77,9 @@ Champs optionnels par épisode (utilisés pour la fiche maison) : `title`, `rele
 `thumbnail`, `overview`. Avec `ownMeta`, le champ `imdb` (`"16:5"`, soit saison:épisode chez Cinemeta)
 rattache aussi le fichier à la fiche IMDb officielle.
 
-Relance `npm run build`. Tes modifications sont conservées. Pour repartir de zéro :
-`node build.mjs --remap`.
+Relance `npm run build`. Tes modifications sont conservées. Pour refaire la détection d'une série :
+`node build.mjs --remap=<ownMetaId>`. Pour One Piece Kaï, la numérotation par saga est produite par
+`node scripts/onepiece-kai-mapping.mjs`.
 
 ## 3. Tester en local
 

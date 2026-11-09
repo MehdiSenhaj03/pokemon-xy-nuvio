@@ -1,28 +1,52 @@
 {
   "addonId": "community.pokemon.xy.raw",
-  "addonName": "Pokémon XY RAW",
-  "description": "Pokémon XY, XY Kalos Quest et XYZ en intégralité (saisons 17, 18, 19) + les 6 épisodes spéciaux. VO japonaise, 1080p.",
-  "version": "1.1.0",
-  "source": "pokemon-xy.torrent",
-  "imdbId": "tt0168366",
-  "ownMeta": true,
-  "ownMetaId": "pokemonxy",
-  "seriesName": "Pokémon XY & XYZ",
-  "year": "2013–2016",
-  "genres": [
-    "Animation",
-    "Aventure"
-  ],
-  "poster": "",
-  "background": "",
-  "logo": "",
-  "streamLabel": "1080p VO JP",
+  "addonName": "Collection Anime",
+  "description": "Pokémon XY / XYZ en VO japonaise 1080p (sous-titres FR) et One Piece Kaï (VF/VOSTFR).",
+  "version": "1.2.0",
   "publicUrl": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio",
-  "subtitlesDir": "subtitles",
+  "catalogId": "pokemonxy-catalog",
   "extraTrackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
     "udp://tracker.torrent.eu.org:451/announce",
     "udp://exodus.desync.com:6969/announce"
+  ],
+  "series": [
+    {
+      "key": "pokemonxy",
+      "ownMetaId": "pokemonxy",
+      "source": "pokemon-xy.torrent",
+      "imdbId": "tt0168366",
+      "ownMeta": true,
+      "seriesName": "Pokémon XY & XYZ",
+      "description": "Pokémon XY, XY Kalos Quest et XYZ en intégralité (saisons 17, 18, 19) + les 6 épisodes spéciaux. VO japonaise, 1080p.",
+      "year": "2013–2016",
+      "genres": [
+        "Animation",
+        "Aventure"
+      ],
+      "streamLabel": "1080p VO JP",
+      "subtitlesDir": "subtitles",
+      "mapping": "mapping.json",
+      "cache": "torrent-info.json"
+    },
+    {
+      "key": "onepiecekai",
+      "ownMetaId": "onepiecekai",
+      "source": "onepiece-kai.torrent",
+      "seriesName": "One Piece Kaï",
+      "description": "One Piece Kaï : la série remontée par des fans (Fan-Kai), sans le remplissage, de East Blue à Egghead. 133 épisodes en 12 arcs. VF + VOSTFR jusqu’à Punk Hazard (épisode 68), puis VOSTFR.",
+      "year": "2018–2026",
+      "genres": [
+        "Animation",
+        "Aventure",
+        "Action"
+      ],
+      "mapping": "mapping-onepiecekai.json",
+      "cache": "torrent-info-onepiecekai.json",
+      "poster": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/poster.jpg",
+      "background": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/background.jpg",
+      "logo": "https://mehdisenhajynov.github.io/pokemon-xy-nuvio/assets/onepiecekai/logo.png"
+    }
   ]
 }

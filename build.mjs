@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const CONFIG_FILE = path.join(ROOT, 'config.json')
-const CACHE_FILE = path.join(ROOT, 'torrent-info.json')
-const MAPPING_FILE = path.join(ROOT, 'mapping.json')
+
+
 const DIST = path.join(ROOT, 'docs')
 
 const VIDEO_EXT = new Set(['.mkv', '.mp4', '.avi', '.m4v', '.webm', '.mov', '.ts', '.wmv', '.flv', '.mpg', '.mpeg'])
@@ -27,18 +27,36 @@ const args = new Set(process.argv.slice(2))
 
 // ---------------------------------------------------------------- config
 
+// config.json décrit l'addon, puis une ou plusieurs séries dans "series".
+// Ancien format (une seule série, champs à la racine) toujours accepté.
+const ADDON_KEYS = ['addonId', 'addonName', 'description', 'version', 'publicUrl', 'extraTrackers', 'catalogId']
+
 function loadConfig () {
-  const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
-  const need = (k) => { if (!cfg[k]) fail(`config.json : le champ "${k}" est obligatoire.`) }
-  need('addonId'); need('addonName'); need('source'); need('seriesName')
-  if (cfg.source.includes('COLLE_TON_MAGNET_ICI')) fail('config.json : remplace "source" par ton lien magnet (ou le chemin d\'un fichier .torrent).')
-  if (!/^[a-z0-9._-]+$/i.test(cfg.addonId)) fail('config.json : "addonId" ne doit contenir que lettres, chiffres, points, tirets.')
-  cfg.imdbId = (cfg.imdbId || '').trim()
-  if (cfg.imdbId === 'tt0000000') cfg.imdbId = ''
-  if (cfg.imdbId && !/^tt\d+$/.test(cfg.imdbId)) fail('config.json : "imdbId" doit ressembler à tt1234567 (ou être vide).')
-  cfg.version ||= '1.0.0'
-  cfg.extraTrackers ||= []
-  return cfg
+  const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
+  const addon = Object.fromEntries(ADDON_KEYS.filter(k => k in raw).map(k => [k, raw[k]]))
+  if (!addon.addonId || !addon.addonName) fail('config.json : "addonId" et "addonName" sont obligatoires.')
+  if (!/^[a-z0-9._-]+$/i.test(addon.addonId)) fail('config.json : "addonId" ne doit contenir que lettres, chiffres, points, tirets.')
+  addon.version ||= '1.0.0'
+  addon.extraTrackers ||= []
+  const list = raw.series || [Object.fromEntries(Object.entries(raw).filter(([k]) => !ADDON_KEYS.includes(k) || k === 'description'))]
+  const series = list.map((s, i) => {
+    const need = (k) => { if (!s[k]) fail(`config.json : série n°${i + 1}, le champ "${k}" est obligatoire.`) }
+    need('source'); need('seriesName')
+    if (s.source.includes('COLLE_TON_MAGNET_ICI')) fail('config.json : remplace "source" par ton lien magnet (ou le chemin d\'un fichier .torrent).')
+    s.imdbId = (s.imdbId || '').trim()
+    if (s.imdbId === 'tt0000000') s.imdbId = ''
+    if (s.imdbId && !/^tt\d+$/.test(s.imdbId)) fail(`config.json : "${s.seriesName}" : "imdbId" doit ressembler à tt1234567 (ou être vide).`)
+    s.ownMeta = !s.imdbId || Boolean(s.ownMeta)
+    s.key = (s.ownMetaId || s.key || (list.length === 1 ? addon.addonId : s.seriesName)).replace(/[^a-z0-9]/gi, '').toLowerCase()
+    // fichiers propres à la série (par défaut ceux de l'ancien format pour la première)
+    s.mappingFile = path.join(ROOT, s.mapping || (i === 0 ? 'mapping.json' : `mapping-${s.key}.json`))
+    s.cacheFile = path.join(ROOT, s.cache || (i === 0 ? 'torrent-info.json' : `torrent-info-${s.key}.json`))
+    s.subtitlesPath = path.join(ROOT, s.subtitlesDir || (i === 0 ? 'subtitles' : `subtitles-${s.key}`))
+    return s
+  })
+  const keys = series.map(s => s.key)
+  if (new Set(keys).size !== keys.length) fail('config.json : deux séries ont le même identifiant (ownMetaId).')
+  return { addon, series }
 }
 
 function fail (msg) {
@@ -82,7 +100,7 @@ function bdecode (buf) {
   return { value, infoRange }
 }
 
-function readTorrentFile (file) {
+export function readTorrentFile (file) {
   const buf = fs.readFileSync(file)
   const { value, infoRange } = bdecode(buf)
   if (!value.info || !infoRange) fail(`${file} n'est pas un fichier .torrent valide.`)
@@ -129,6 +147,7 @@ async function fetchMagnetMetadata (magnet, extraTrackers) {
 }
 
 async function getTorrentInfo (cfg) {
+  const CACHE_FILE = cfg.cacheFile
   if (fs.existsSync(CACHE_FILE)) {
     const cached = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'))
     if (cached.source === cfg.source) return cached
@@ -205,8 +224,10 @@ function buildMapping (info) {
   return { infoHash: info.infoHash, episodes, unmatched, ignored }
 }
 
-function loadOrCreateMapping (info) {
-  if (!args.has('--remap') && fs.existsSync(MAPPING_FILE)) {
+function loadOrCreateMapping (info, s, single) {
+  const MAPPING_FILE = s.mappingFile
+  const remap = args.has(`--remap=${s.key}`) || (single && args.has('--remap'))
+  if (!remap && fs.existsSync(MAPPING_FILE)) {
     const m = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'))
     if (m.infoHash === info.infoHash) {
       // les entrées "unmatched" complétées à la main sont prises en compte
@@ -217,7 +238,7 @@ function loadOrCreateMapping (info) {
   }
   const m = buildMapping(info)
   fs.writeFileSync(MAPPING_FILE, JSON.stringify(m, null, 2))
-  console.log(`✔ mapping.json créé : ${m.episodes.length} épisode(s) détecté(s)`)
+  console.log(`✔ ${path.basename(MAPPING_FILE)} créé : ${m.episodes.length} épisode(s) détecté(s)`)
   return m
 }
 
@@ -238,25 +259,17 @@ function writeJson (rel, data) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-function build (cfg, info, mapping) {
-  fs.rmSync(DIST, { recursive: true, force: true })
-  fs.mkdirSync(DIST, { recursive: true })
-
-  // Deux façons d'exposer la série (cumulables) :
-  //  - imdbId : les flux apparaissent sur la fiche officielle (Cinemeta) de la série.
-  //    Si une entrée de mapping.json a un champ "imdb": "S:E", c'est cette numérotation qui est utilisée.
-  //  - ownMeta (ou pas d'imdbId) : l'addon fournit sa propre fiche, avec SA numérotation (season/episode)
-  //    et les titres/vignettes/dates éventuellement présents dans mapping.json.
-  const imdbId = cfg.imdbId
-  const ownMeta = !imdbId || Boolean(cfg.ownMeta)
-  const ownId = (cfg.ownMetaId || cfg.addonId).replace(/[^a-z0-9]/gi, '')
-  const catalogId = `${ownMeta ? ownId : imdbId}-catalog`
+// Prépare une série : regroupe ses fichiers par épisode, construit sa fiche et ses flux.
+function buildSeries (addon, s, info, mapping) {
+  const imdbId = s.imdbId
+  const ownMeta = s.ownMeta
+  const ownId = s.key
   const fromImdb = (kind) => imdbId ? `https://images.metahub.space/${kind}/medium/${imdbId}/img` : ''
-  const poster = cfg.poster || fromImdb('poster')
-  const background = cfg.background || fromImdb('background')
-  const logo = cfg.logo || fromImdb('logo')
+  const poster = s.poster || fromImdb('poster')
+  const background = s.background || fromImdb('background')
+  const logo = s.logo || fromImdb('logo')
 
-  const trackers = [...new Set([...(info.announce || []), ...cfg.extraTrackers])].filter(t => /^(udp|https?):\/\//.test(t))
+  const trackers = [...new Set([...(info.announce || []), ...addon.extraTrackers])].filter(t => /^(udp|https?):\/\//.test(t))
   const sources = [...trackers.map(t => `tracker:${t}`), `dht:${info.infoHash}`]
   const sizeByIdx = new Map(info.files.map(f => [f.idx, f.length]))
 
@@ -274,41 +287,18 @@ function build (cfg, info, mapping) {
   const ownGroups = ownMeta ? group(e => `${e.season}:${e.episode}`) : new Map()
   const imdbGroups = imdbId ? group(e => ownMeta ? e.imdb : (e.imdb || `${e.season}:${e.episode}`)) : new Map()
 
-  // --- manifest
-  const streamPrefixes = [...(ownMeta ? [`${ownId}:`] : []), ...(imdbId ? [`${imdbId}:`] : [])]
-  const resources = ['catalog']
-  if (ownMeta) resources.push({ name: 'meta', types: ['series'], idPrefixes: [ownId] })
-  resources.push({ name: 'stream', types: ['series'], idPrefixes: streamPrefixes })
-  const manifest = {
-    id: cfg.addonId,
-    version: cfg.version,
-    name: cfg.addonName,
-    description: cfg.description || `${cfg.seriesName} — tous les épisodes.`,
-    ...(cfg.logo ? { logo: cfg.logo } : {}),
-    ...(background ? { background } : {}),
-    resources,
-    types: ['series'],
-    idPrefixes: [...(ownMeta ? [ownId] : []), ...(imdbId ? [imdbId] : [])],
-    catalogs: [{ type: 'series', id: catalogId, name: cfg.addonName }],
-    behaviorHints: { configurable: false, p2p: true }
-  }
-  writeJson('manifest.json', manifest)
-
-  // --- catalogue (la série apparaît sur l'accueil de Nuvio)
   const preview = {
     id: ownMeta ? ownId : imdbId,
     type: 'series',
-    name: cfg.seriesName,
+    name: s.seriesName,
     ...(poster ? { poster } : {}),
     ...(background ? { background } : {}),
     ...(logo ? { logo } : {}),
-    description: cfg.description || '',
-    ...(cfg.genres ? { genres: cfg.genres } : {}),
-    ...(cfg.year ? { releaseInfo: String(cfg.year) } : {})
+    description: s.description || '',
+    ...(s.genres ? { genres: s.genres } : {}),
+    ...(s.year ? { releaseInfo: String(s.year) } : {})
   }
-  writeJson(`catalog/series/${catalogId}.json`, { metas: [preview] })
 
-  // --- fiche maison avec la liste des épisodes
   if (ownMeta) {
     const videos = [...ownGroups.entries()].map(([k, files], i) => {
       const [season, episode] = k.split(':').map(Number)
@@ -326,22 +316,21 @@ function build (cfg, info, mapping) {
     writeJson(`meta/series/${ownId}.json`, { meta: { ...preview, videos } })
   }
 
-  // --- sous-titres : <subtitlesDir>/S17E01.fra.vtt (numérotation de mapping.json), publiés dans docs/subtitles/
+  // --- sous-titres : <dossier>/S17E01.fra.vtt (numérotation de la fiche), publiés dans docs/<dossier>/
   const subsByEp = new Map()
-  const subsSrc = path.join(ROOT, cfg.subtitlesDir || 'subtitles')
-  if (fs.existsSync(subsSrc)) {
-    if (!cfg.publicUrl) fail('config.json : "publicUrl" est obligatoire pour publier les sous-titres (ex. https://pseudo.github.io/depot).')
-    const base = cfg.publicUrl.replace(/\/+$/, '')
-    fs.mkdirSync(path.join(DIST, 'subtitles'), { recursive: true })
-    for (const f of fs.readdirSync(subsSrc).sort()) {
+  if (fs.existsSync(s.subtitlesPath)) {
+    if (!addon.publicUrl) fail('config.json : "publicUrl" est obligatoire pour publier les sous-titres (ex. https://pseudo.github.io/depot).')
+    const base = addon.publicUrl.replace(/\/+$/, '')
+    const pub = path.basename(s.subtitlesPath)
+    fs.mkdirSync(path.join(DIST, pub), { recursive: true })
+    for (const f of fs.readdirSync(s.subtitlesPath).sort()) {
       const m = f.match(/^S(\d+)E(\d+)\.([a-z]{2,3})\.(vtt|srt)$/i)
       if (!m) continue
-      fs.copyFileSync(path.join(subsSrc, f), path.join(DIST, 'subtitles', f))
+      fs.copyFileSync(path.join(s.subtitlesPath, f), path.join(DIST, pub, f))
       const key = `${+m[1]}:${+m[2]}`
       if (!subsByEp.has(key)) subsByEp.set(key, [])
-      subsByEp.get(key).push({ id: `${cfg.addonId}-${key}-${m[3]}`, url: `${base}/subtitles/${f}`, lang: m[3].toLowerCase() })
+      subsByEp.get(key).push({ id: `${addon.addonId}-${ownId}-${key}-${m[3]}`, url: `${base}/${pub}/${f}`, lang: m[3].toLowerCase() })
     }
-    // Français en premier.
     for (const list of subsByEp.values()) list.sort((a, b) => (a.lang === 'fra' ? -1 : 0) - (b.lang === 'fra' ? -1 : 0))
   }
 
@@ -351,101 +340,154 @@ function build (cfg, info, mapping) {
     const size = sizeByIdx.get(e.fileIdx)
     const text = `${filename}\n💾 ${humanSize(size)}`
     const subtitles = subsByEp.get(`${e.season}:${e.episode}`)
+    const label = e.label || s.streamLabel
     return {
       ...(subtitles ? { subtitles } : {}),
-      name: `${cfg.addonName}${cfg.streamLabel ? '\n' + cfg.streamLabel : ''}`,
+      name: `${addon.addonName}${label ? '\n' + label : ''}`,
       title: text,
       description: text,
       infoHash: info.infoHash,
       fileIdx: e.fileIdx,
       sources,
-      behaviorHints: { bingeGroup: `${cfg.addonId}|${info.infoHash}`, filename, videoSize: size }
+      behaviorHints: { bingeGroup: `${addon.addonId}|${info.infoHash}`, filename, videoSize: size }
     }
   })
   for (const [key, files] of ownGroups) writeJson(`stream/series/${ownId}:${key}.json`, { streams: streamsFor(files) })
   for (const [key, files] of imdbGroups) writeJson(`stream/series/${imdbId}:${key}.json`, { streams: streamsFor(files) })
 
-  // --- page d'installation
   const shown = ownMeta ? ownGroups : imdbGroups
   const epList = [...shown.entries()].map(([k, fs_]) => {
-    const [s, e] = k.split(':')
-    const label = s === '0' ? `Spécial ${e}` : `S${s.padStart(2, '0')}E${e.padStart(2, '0')}`
+    const [se, ep] = k.split(':')
+    const label = se === '0' ? `Spécial ${ep}` : `S${se.padStart(2, '0')}E${ep.padStart(2, '0')}`
     return `<li><b>${label}</b> ${fs_[0].title ? esc(fs_[0].title) + ' — ' : ''}<span>${esc(path.basename(fs_[0].path))}</span></li>`
   }).join('\n')
-  const magnet = `magnet:?xt=urn:btih:${info.infoHash}&dn=${encodeURIComponent(info.name || cfg.seriesName)}` +
+  const magnet = `magnet:?xt=urn:btih:${info.infoHash}&dn=${encodeURIComponent(info.name || s.seriesName)}` +
     trackers.slice(0, 10).map(t => `&tr=${encodeURIComponent(t)}`).join('')
-  fs.writeFileSync(path.join(DIST, 'index.html'), installPage(cfg, epList, shown.size, poster, magnet))
-  fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
 
-  return { episodes: shown.size, imdbLinked: imdbGroups.size, seriesId: ownMeta ? ownId : imdbId, subtitled: subsByEp.size }
+  return {
+    s, preview, poster, ownMeta, ownId, imdbId, epList, magnet,
+    episodes: shown.size, imdbLinked: imdbGroups.size, subtitled: subsByEp.size,
+    seriesId: ownMeta ? ownId : imdbId
+  }
 }
 
-function installPage (cfg, epList, count, poster, magnet) {
+function build (addon, list) {
+  fs.rmSync(DIST, { recursive: true, force: true })
+  fs.mkdirSync(DIST, { recursive: true })
+  // Images locales (affiches, vignettes) : assets/ est publié tel quel dans docs/assets/
+  const assets = path.join(ROOT, 'assets')
+  if (fs.existsSync(assets)) fs.cpSync(assets, path.join(DIST, 'assets'), { recursive: true })
+
+  const built = list.map(({ s, info, mapping }) => buildSeries(addon, s, info, mapping))
+
+  // --- manifest
+  const ownIds = built.filter(b => b.ownMeta).map(b => b.ownId)
+  const imdbIds = built.filter(b => b.imdbId).map(b => b.imdbId)
+  const resources = ['catalog']
+  if (ownIds.length) resources.push({ name: 'meta', types: ['series'], idPrefixes: ownIds })
+  resources.push({ name: 'stream', types: ['series'], idPrefixes: [...ownIds, ...imdbIds].map(id => `${id}:`) })
+  // Un seul catalogue avec toutes les séries. Son id reste celui de la première série pour ne pas
+  // casser la configuration de l'accueil chez ceux qui avaient déjà l'addon.
+  const catalogId = addon.catalogId || `${built[0].seriesId}-catalog`
+  const background = built[0].preview.background
+  const manifest = {
+    id: addon.addonId,
+    version: addon.version,
+    name: addon.addonName,
+    description: addon.description || built.map(b => b.s.seriesName).join(', '),
+    ...(addon.logo ? { logo: addon.logo } : {}),
+    ...(background ? { background } : {}),
+    resources,
+    types: ['series'],
+    idPrefixes: [...ownIds, ...imdbIds],
+    catalogs: [{ type: 'series', id: catalogId, name: addon.addonName }],
+    behaviorHints: { configurable: false, p2p: true }
+  }
+  writeJson('manifest.json', manifest)
+  writeJson(`catalog/series/${catalogId}.json`, { metas: built.map(b => b.preview) })
+
+  fs.writeFileSync(path.join(DIST, 'index.html'), installPage(addon, built))
+  fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
+  return built
+}
+
+function installPage (addon, built) {
+  const total = built.reduce((a, b) => a + b.episodes, 0)
+  const seriesBlocks = built.map((b, i) => `
+<div class="box"><div class="head">${b.poster ? `<img src="${esc(b.poster)}" alt="">` : ''}<div><h2>${esc(b.s.seriesName)}</h2><p>${esc(b.s.description || '')}</p><p>${b.episodes} épisodes</p></div></div>
+<details><summary>Magnet (pour TorBox / Premiumize)</summary><code id="magnet${i}">${esc(b.magnet)}</code>
+<div class="btns"><button data-copy="magnet${i}">Copier le magnet</button></div></details>
+<details><summary>Liste des épisodes</summary><ul>${b.epList}</ul></details></div>`).join('\n')
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(cfg.addonName)}</title>
+<title>${esc(addon.addonName)}</title>
 <style>
 :root{--bg:#0f1115;--card:#181b22;--fg:#e8eaf0;--mut:#9aa0ad;--acc:#7c5cff}
 *{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
 main{max-width:720px;margin:0 auto;padding:32px 16px}
-.head{display:flex;gap:20px;align-items:center}.head img{width:110px;border-radius:10px}
-h1{margin:0 0 4px;font-size:28px}p{color:var(--mut);margin:0}
+.head{display:flex;gap:20px;align-items:center}.head img{width:96px;border-radius:10px}
+h1{margin:0 0 4px;font-size:28px}h2{margin:0 0 4px;font-size:20px}p{color:var(--mut);margin:0}
 .box{background:var(--card);border-radius:12px;padding:16px;margin-top:24px}
-code{display:block;word-break:break-all;background:#0b0d11;padding:10px;border-radius:8px;font-size:14px}
+code{display:block;word-break:break-all;background:#0b0d11;padding:10px;border-radius:8px;font-size:14px;margin-top:8px}
 .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 button,a.btn{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer;text-decoration:none}
-a.btn.alt{background:#2a2f3a}
-ol{padding-left:20px;color:var(--mut)}ul{list-style:none;padding:0;margin:0;max-height:360px;overflow:auto}
+a.btn.alt{background:#2a2f3a}summary{cursor:pointer;margin-top:12px;color:var(--fg)}
+ol{padding-left:20px;color:var(--mut)}ul{list-style:none;padding:0;margin:8px 0 0;max-height:360px;overflow:auto}
 li{padding:6px 0;border-bottom:1px solid #232733;font-size:14px}li span{color:var(--mut);word-break:break-all}
 </style></head><body><main>
-<div class="head">${poster ? `<img src="${esc(poster)}" alt="">` : ''}<div><h1>${esc(cfg.addonName)}</h1><p>${esc(cfg.description || cfg.seriesName)}</p><p>${count} épisodes</p></div></div>
+<h1>${esc(addon.addonName)}</h1><p>${esc(addon.description || '')}</p><p>${built.length} séries, ${total} épisodes</p>
 <div class="box"><b>Lien de l'addon</b><code id="url"></code>
 <div class="btns"><button id="copy">Copier le lien</button><a class="btn alt" id="stremio">Ouvrir dans Stremio</a></div></div>
 <div class="box"><b>Installer dans Nuvio</b><ol>
 <li>Copie le lien ci-dessus.</li><li>Nuvio → Paramètres → Addons.</li><li>Colle le lien et valide.</li>
-<li>Cherche « ${esc(cfg.seriesName)} » ou ouvre-la depuis l'accueil, choisis un épisode, puis la source « ${esc(cfg.addonName)} ».</li></ol></div>
+<li>Les séries apparaissent sur l'accueil et dans la recherche. Choisis un épisode, puis la source « ${esc(addon.addonName)} ».</li></ol></div>
 <div class="box"><b>Avec TorBox ou Premiumize (sans P2P)</b><ol>
 <li>Dans Nuvio : Paramètres → Debrid, connecte ton compte TorBox ou Premiumize.</li>
 <li>Les épisodes passent alors par ton debrid : lecture directe, sans P2P, et ton IP n'est pas exposée.</li>
-<li>Ça ne marche que si le torrent est déjà dans le cache du service. Sinon, ajoute ce magnet <b>une fois</b> sur le site de TorBox ou Premiumize. Une fois téléchargé chez eux, il devient disponible pour tout le monde.</li></ol>
-<code id="magnet">${esc(magnet)}</code>
-<div class="btns"><button id="copymag">Copier le magnet</button></div></div>
-<div class="box"><b>Épisodes</b><ul>${epList}</ul></div>
+<li>Ça ne marche que si le torrent est déjà dans le cache du service. Sinon, ajoute le magnet de la série <b>une fois</b> sur le site de TorBox ou Premiumize. Une fois téléchargé chez eux, il devient disponible pour tout le monde.</li></ol></div>
+${seriesBlocks}
 </main><script>
 const u=new URL('manifest.json',location.href).href;document.getElementById('url').textContent=u;
 document.getElementById('stremio').href=u.replace(/^https?:/,'stremio:');
-const copy=(btn,text)=>btn.onclick=async e=>{try{await navigator.clipboard.writeText(text);e.target.textContent='Copié ✔'}catch{prompt('Copie ce lien :',text)}};
+const copy=(btn,text)=>btn.onclick=async e=>{try{await navigator.clipboard.writeText(text);e.target.textContent='Copié ✔'}catch{prompt('Copie ce texte :',text)}};
 copy(document.getElementById('copy'),u);
-copy(document.getElementById('copymag'),document.getElementById('magnet').textContent);
+document.querySelectorAll('[data-copy]').forEach(b=>copy(b,document.getElementById(b.dataset.copy).textContent));
 </script></body></html>`
 }
 
 // ---------------------------------------------------------------- main
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const cfg = loadConfig()
-  const info = await getTorrentInfo(cfg)
-  const mapping = loadOrCreateMapping(info)
-  const { episodes, imdbLinked, seriesId, subtitled } = build(cfg, info, mapping)
+  const { addon, series } = loadConfig()
+  const list = []
+  for (const s of series) {
+    const info = await getTorrentInfo(s)
+    const mapping = loadOrCreateMapping(info, s, series.length === 1)
+    list.push({ s, info, mapping })
+  }
+  const built = build(addon, list)
 
-  const seasons = {}
-  for (const e of mapping.episodes) (seasons[e.season] ||= new Set()).add(e.episode)
-  console.log(`\n✔ Addon généré dans docs/ : ${episodes} épisode(s)`)
-  for (const [s, set] of Object.entries(seasons)) {
-    const eps = [...set].sort((a, b) => a - b)
-    const missing = []
-    for (let e = 1; e <= eps.at(-1); e++) if (!set.has(e)) missing.push(e)
-    console.log(`  Saison ${s} : ${eps.length} épisode(s) (E${eps[0]}→E${eps.at(-1)})${missing.length ? `  ⚠ manquants : ${missing.join(', ')}` : ''}`)
+  console.log(`\n✔ Addon généré dans docs/ (${built.length} série(s))`)
+  for (const b of built) {
+    const { mapping } = list.find(x => x.s === b.s)
+    console.log(`\n■ ${b.s.seriesName} : ${b.episodes} épisode(s), fiche « ${b.seriesId} »`)
+    const seasons = {}
+    for (const e of mapping.episodes) (seasons[e.season] ||= new Set()).add(e.episode)
+    for (const [se, set] of Object.entries(seasons)) {
+      const eps = [...set].sort((a, c) => a - c)
+      const missing = []
+      for (let e = eps[0]; e <= eps.at(-1); e++) if (!set.has(e)) missing.push(e)
+      const miss = missing.length > 15 ? `${missing.slice(0, 15).join(', ')}… (${missing.length})` : missing.join(', ')
+      console.log(`  Saison ${se} : ${eps.length} épisode(s) (E${eps[0]}→E${eps.at(-1)})${missing.length ? `  ⚠ manquants : ${miss}` : ''}`)
+    }
+    const pending = (mapping.unmatched || []).filter(u => !Number.isInteger(u.season))
+    if (pending.length) {
+      console.log(`  ⚠ ${pending.length} fichier(s) vidéo non reconnu(s) : remplis "season"/"episode" dans "unmatched" de ${path.basename(b.s.mappingFile)}.`)
+      for (const u of pending.slice(0, 10)) console.log('   - ' + u.path)
+    }
+    if (b.imdbId) console.log(`  ℹ ${b.imdbLinked} épisode(s) rattaché(s) à la fiche IMDb ${b.imdbId}.`)
+    if (b.subtitled) console.log(`  ℹ Sous-titres pour ${b.subtitled} épisode(s).`)
   }
-  const pending = (mapping.unmatched || []).filter(u => !Number.isInteger(u.season))
-  if (pending.length) {
-    console.log(`\n⚠ ${pending.length} fichier(s) vidéo non reconnu(s). Ouvre mapping.json, remplis "season"/"episode" dans "unmatched", puis relance npm run build :`)
-    for (const u of pending.slice(0, 15)) console.log('   - ' + u.path)
-    if (pending.length > 15) console.log(`   … et ${pending.length - 15} autre(s)`)
-  }
-  if (!cfg.imdbId || cfg.ownMeta) console.log(`\nℹ Fiche maison fournie par l'addon (id "${seriesId}").`)
-  if (cfg.imdbId) console.log(`ℹ ${imdbLinked} épisode(s) aussi rattaché(s) à la fiche IMDb ${cfg.imdbId}.`)
-  if (subtitled) console.log(`ℹ Sous-titres fournis pour ${subtitled} épisode(s).`)
   console.log('\nTeste en local : npm run serve   puis héberge le dossier docs/ (voir README).')
   process.exit(0) // webtorrent peut laisser des sockets ouverts
 }
